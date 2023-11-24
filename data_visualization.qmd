@@ -132,7 +132,7 @@ ggplot(plot_data, aes(x = `1965`, y = country)) +
   labs(title = "Oil Consumption in 1965 by Country",
        x = "Oil Consumption in 1965",
        y = "Country") +
-  theme(axis.text.y = element_text(angle = 0, hjust = 1))  # Adjust y-axis labels if needed
+  theme(axis.text.y = element_text(angle = 45, hjust = 1))  # Adjust y-axis labels if needed
 
 ```
 
@@ -304,10 +304,10 @@ ggplot(top_5_increase, aes(x = country, y = increase, fill = country)) +
   labs(title = "Top 5 Countries with the Most Increase in Oil Consumption (1965 to 2015)",
        x = "Country",
        y = "Increase in Oil Consumption") +
-  theme(legend.position = "bottom") +
   scale_fill_manual(values = rainbow(length(unique(top_5_increase$country))))
 
 ```
+
 ```{r}
 library(dplyr)
 library(ggplot2)
