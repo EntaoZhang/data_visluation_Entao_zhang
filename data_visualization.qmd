@@ -194,8 +194,8 @@ plot_data <- oil_tibble |>
   filter(!is.na(`1965`))
 
 # Plot the data in a horizontal bar plot with a legend
-ggplot(plot_data, aes(x = `1965`, y = country, fill = country)) +
-  geom_histogram() +
+ggplot(plot_data, aes(x = `1965`, y = '', fill = country)) +
+  geom_bar(stat = "identity") +
   labs(title = "Oil Consumption in 1965 by Country",
        x = "Oil Consumption in 1965",
        y = "Country") +
@@ -207,15 +207,7 @@ ggplot(plot_data, aes(x = `1965`, y = country, fill = country)) +
 
 
 
-
-
-
-
 ```{r}
-
-library(ggplot2)
-
-# Filter rows where oil consumption in 1965 is not NA
 plot_data <- oil_tibble %>%
   filter(!is.na(`1965`))
 
@@ -225,16 +217,20 @@ country_colors <- rainbow(length(unique(plot_data$country)))
 # Map colors to countries
 plot_data$color <- country_colors[match(plot_data$country, unique(plot_data$country))]
 
-# Plot the data with legend
-ggplot(plot_data, aes(x = `1965`, y = country, fill = color)) +
-  geom_histogram() +
+# Plot the data with a combined color legend
+ggplot(plot_data, aes(x = `1965`, y = reorder(country, -`1965`), fill = color, group = country)) +
+  geom_col() +
   labs(title = "Oil Consumption in 1965 by Country",
-       x = "Oil Consumption in 1965") +
+       x = "",
+       y = "Oil Consumption in 1965") +
+  scale_fill_identity() +
   theme(legend.position = "bottom") +
-  guides(fill = guide_legend(override.aes = list(color = country_colors),
-                             title = "Country"))
+  guides(fill = guide_legend(nrow = 2, byrow = TRUE))  # Adjust the number of rows and layout of the legend
+
 
 ```
+
+
 ```{r}
 library(ggplot2)
 
@@ -257,6 +253,7 @@ ggplot(top_10_data, aes(x = `1965`, y = reorder(country, -`1965`), fill = countr
 
 
 ```
+
 ```{r}
 library(ggplot2)
 
@@ -279,8 +276,67 @@ ggplot(top_10_data, aes(x = "", y = `1965`, fill = country)) +
   theme()
 
 ```
+```{r}
 
+```
 
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Assuming your data frame is named 'your_tibble'
+# Filter rows where oil consumption in 1965 and 2015 is not NA
+plot_data <- oil_tibble |> 
+  filter(!is.na(`1965`) & !is.na(`2015`))
+
+# Calculate the increase in oil consumption from 1965 to 2015
+plot_data <- plot_data |> 
+  mutate(increase = `2015` - `1965`)
+
+# Order the data by the increase in oil consumption in descending order and take the top 5
+top_5_increase <- plot_data |> 
+  arrange(desc(increase)) |> 
+  slice(1:5)
+
+# Plot the data with legend
+ggplot(top_5_increase, aes(x = country, y = increase, fill = country)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Countries with the Most Increase in Oil Consumption (1965 to 2015)",
+       x = "Country",
+       y = "Increase in Oil Consumption") +
+  theme(legend.position = "bottom") +
+  scale_fill_manual(values = rainbow(length(unique(top_5_increase$country))))
+
+```
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Assuming your data frame is named 'your_tibble'
+# Filter rows where oil consumption in 1965 and 2015 is not NA
+plot_data <- oil_tibble |> 
+  filter(!is.na(`1965`) & !is.na(`2015`))
+
+# Calculate the compound annual growth rate (CAGR)
+plot_data <- plot_data |> 
+  #the compound annual growth rate (CAGR) formula
+  mutate(cagr = ((`2015` / `1965`)^(1/51)) - 1)  # Assuming 51 years between 1965 and 2015
+
+# Order the data by CAGR in descending order and take the top 5
+top_5_cagr <- plot_data |> 
+  arrange(desc(cagr)) |> 
+  slice(1:5)
+
+# Plot the data with legend
+ggplot(top_5_cagr, aes(x = country, y = cagr, fill = country)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Top 5 Countries with the Fastest Increase in Oil Consumption (CAGR 1965 to 2015)",
+       x = "Country",
+       y = "Compound Annual Growth Rate (CAGR)") +
+  theme(legend.position = "bottom") +
+  scale_fill_manual(values = rainbow(length(unique(top_5_cagr$country))))
+
+```
 ### data in maximale temperature in Luxembourg city
 
 ```{r}
