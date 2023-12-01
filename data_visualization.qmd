@@ -4,11 +4,12 @@ format: html
 editor: visual
 ---
 
-
 ```{r}
 library(tidyverse)
 ```
+
 ### Clean the data
+
 ```{r}
 # Read the CSV file
 oil_data <- read.csv("data/oil_consumption_total.csv")
@@ -55,6 +56,7 @@ print(oil_tibble)
 ```
 
 ### Oil consumption in Luxembourg over years(1965 to 2019)
+
 ```{r}
 library(ggplot2)
 
@@ -76,6 +78,8 @@ ggplot(lux_plot_data, aes(x = Year, y = Oil_Consumption)) +
        y = "Oil Consumption")
 
 ```
+
+
 ```{r}
 library(ggplot2)
 usa_data <- oil_tibble |> 
@@ -97,7 +101,6 @@ ggplot(usa_plot_data, aes(x = Year, y = Oil_Consumption)) +
 
 ```
 
-
 ```{r}
 library(ggplot2)
 
@@ -114,10 +117,6 @@ ggplot(plot_data, aes(x = country, y = `1965`)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels for better visibility
 
 ```
-
-
-
-
 
 ```{r}
 library(ggplot2)
@@ -136,8 +135,6 @@ ggplot(plot_data, aes(x = `1965`, y = country)) +
 
 ```
 
-
-
 ```{r}
 library(ggplot2)
 
@@ -153,11 +150,6 @@ ggplot(plot_data, aes(x = `1965`, y = reorder(country, -`1965`))) +
        y = "Country") +
   theme(axis.text.y = element_text(hjust = 1, margin = margin(t = 0.8, b = 0.1)))  # Adjust y-axis labels
 ```
-
-
-
-
-
 
 ```{r}
 
@@ -178,14 +170,6 @@ ggplot(plot_data, aes(x = `1965`, y = reorder(country, -`1965`))) +
 
 ```
 
-
-
-
-
-
-
-
-
 ```{r}
 library(ggplot2)
 
@@ -204,8 +188,6 @@ ggplot(plot_data, aes(x = `1965`, y = '', fill = country)) +
 
 
 ```
-
-
 
 ```{r}
 plot_data <- oil_tibble %>%
@@ -229,7 +211,6 @@ ggplot(plot_data, aes(x = `1965`, y = reorder(country, -`1965`), fill = color, g
 
 
 ```
-
 
 ```{r}
 library(ggplot2)
@@ -276,6 +257,7 @@ ggplot(top_10_data, aes(x = "", y = `1965`, fill = country)) +
   theme()
 
 ```
+
 ```{r}
 
 ```
@@ -337,20 +319,80 @@ ggplot(top_5_cagr, aes(x = country, y = cagr, fill = country)) +
   scale_fill_manual(values = rainbow(length(unique(top_5_cagr$country))))
 
 ```
+
 ### data in maximale temperature in Luxembourg city
 
 ```{r}
 library(tidyverse)
-maximal_minimal_temperature <- readxl::read_excel("data/Temperature.xlsx")
-print(maximal_minimal_temperature)
+covid19_confirmed_global <- read_csv("data/time_series_covid19_confirmed_global.csv")
+head(covid19_confirmed_global)
+glimpse(covid19_confirmed_global)
+```
+### Data Clean 
+```{r}
+install.packages("janitor")
+```
+
+```{r}
+library(janitor)
+library(tidyverse)
+d1 <- covid19_confirmed_global |> 
+  pivot_longer(
+    cols = 5:ncol(covid19_confirmed_global),
+    names_to = "date",
+    values_to = "cases"
+  ) |> 
+  mutate(date = lubridate::mdy(date)) |> 
+  janitor::clean_names() |> 
+  group_by(country_region, date) |> 
+  summarise(cases = sum(cases)) 
+d1
 
 ```
 
 
 
+```{r}
+# Install and load required packages
+install.packages("ggplot2")
+install.packages("ggimage")
+install.packages("gapminder")
+
+install.packages("countrycode")
+
+```
 
 
 
+```{r}
+library(ggplot2)
+library(ggimage)
+library(countrycode)
+library(gapminder)
 
+# Load the necessary data
+df <- gapminder::gapminder |>  filter(year == 2007)
 
+# Use country names to get ISO alpha-2 codes
+df$iso_alpha2 <- countrycode(df$country, "country.name", "iso2c")
 
+# Define the image URL format
+image_url <- sprintf("https://raw.githubusercontent.com/matahombres/CSS-Country-Flags-Rounded/master/flags/%s.png", df$iso_alpha2)
+
+# Check if the image URL exists
+df$image_exists <- sapply(df$image_url, function(url) {
+  grepl("200 OK", httr::GET(url)$status_code)
+})
+
+# Create the bubble chart with images (excluding rows with missing images)
+p <- ggplot(subset(df, image_exists), aes(x = lifeExp, y = gdpPercap, size = pop)) +
+  geom_point() +
+  geom_image(aes(image = image_url), size = 0.07) +
+  scale_size_continuous(range = c(3, 15)) +
+  labs(title = "Bubble Chart with Images") +
+  theme_minimal()
+
+# Show the plot
+print(p)
+
+```

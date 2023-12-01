@@ -1,0 +1,370 @@
+---
+title: "Covid"
+format: html
+editor: visual
+---
+
+### 0. Load data
+
+##### COVID-19 Data Repository by the Center for Systems Science and Engineering (CSSE) at Johns Hopkins University
+
+```{r}
+library(tidyverse)
+covid19_deaths_global <- read_csv("data/time_series_covid19_deaths_global.csv")
+head(covid19_deaths_global)
+
+```
+
+### 1. Data Clean
+
+#### 1) 1/22/20 to 2020-01-22 yy/mm/dd by using lubridate::mdy()
+
+```{r}
+c("3/25/20", "03-25-20", "3-25/2020") |> lubridate::mdy()
+```
+
+#### clean column names
+
+```{r}
+install.packages("janitor")
+```
+
+```{r}
+library(janitor)
+library(tidyverse)
+data <- covid19_deaths_global |> 
+  pivot_longer(
+    cols = 5:ncol(covid19_deaths_global), # selected range 
+    names_to = "date",                       # The column names in the selected range stored in new column "date"
+    values_to = "deaths"                      # The values in the selected range stored in new column "date"
+  ) |> 
+  mutate(date = lubridate::mdy(date)) |> # parse the "date" column assuming that the dates are in the month-day-year format.
+  janitor::clean_names() |>      
+  mutate(deaths = as.integer(deaths)) |> # 
+  group_by(country_region, date) |> 
+  summarise(deaths = sum(deaths)) 
+data
+```
+
+#### Show all the countries name
+
+```{r}
+data |> distinct(country_region)
+```
+
+### The deaths of covids in Luxembourg from 01-2020 to 10-2022
+
+```{r}
+data |> 
+  filter(country_region == "US", deaths > 0) |> 
+  ggplot(aes(x = date, y = deaths)) +
+  geom_point() +
+    labs(title = "The deaths of covids in US from 01-2020 to 10-2022 ")
+
+```
+
+```{r}
+data |> 
+  filter(country_region == "Luxembourg", deaths > 0) |> 
+  filter(country_region %in% c("Luxembourg", "US") & deaths > 0) |>
+  ggplot(aes(x = date, y = deaths)) +
+  geom_point() +
+  geom_smooth() +
+    labs(title = "The deaths of covids in US from 01-2020 to 10-2022 ")
+
+```
+
+```{r}
+library(ggplot2)
+
+data |> 
+  filter(country_region %in% c("Luxembourg", "US") & deaths > 0) |> 
+  ggplot(aes(x = date, y = deaths, label = country_region)) +
+  geom_point() +
+  labs(title = "The deaths of covids in Luxembourg and US from 01-2020 to 10-2022")
+
+```
+
+```{r}
+data |> 
+  ggplot(aes(x = date, y = deaths)) +
+  geom_point() +
+  labs(title = "Global COVID-19 Deaths from 01-2020 to 10-2022")
+```
+
+1)  y-axis in log_10
+2)  x-axis in month-year
+
+```{r}
+d1 <- data |> 
+  filter(country_region == "Luxembourg", deaths > 0) |> 
+  ggplot(aes(x = date, y = deaths)) +
+  geom_point() +
+  geom_smooth(method = "gap") +
+  scale_x_date(date_breaks = "3 month", date_labels = "%m-%y") +
+  scale_y_log10(labels = scales::comma) +
+    labs(title = "The deaths of covids in Luxembourg from 01-2020 to 10-2022 ")
+print(d1)
+```
+
+```{r}
+
+library(ggplot2)
+
+
+data |> 
+  filter(country_region %in% c("Luxembourg", "US") & deaths > 0) |> 
+  ggplot(aes(x = date, y = deaths, color = country_region)) +
+  geom_point() +
+  geom_text(aes(label = country_region), hjust = 0, vjust = 0, size = 3) +
+  scale_x_date(date_breaks = "3 months", date_labels = "%m-%y") +
+  scale_y_log10(labels = scales::comma) +
+  geom_smooth() +
+  labs(title = "COVID-19 Deaths in Luxembourg and the US from 01-2020 to 10-2022") +
+  theme_minimal() +  
+  theme(legend.position = "none")  # Remove the legend
+
+```
+
+```{r}
+
+data_wide <- data |> 
+  pivot_wider(names_from = date, values_from = deaths)
+
+# Print the first few rows of the wide dataset
+print(data_wide)
+
+```
+
+```{r}
+library(tidyverse)
+print(colnames(data_wide[,  ncol(data_wide)]))
+
+library(ggplot2)
+
+selected_data <- data_wide |> 
+  select(1, ncol(data_wide)) |> 
+  
+print(selected_data)
+
+ggplot(selected_data, aes(x = country_region, y = `2023-03-09`)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(
+    title = "Data on 2023-03-09",
+    x = "Country",
+    y = "Value"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+```
+
+#### the contries with more than 10000 deaths
+
+```{r}
+large_deaths <- data |> 
+  group_by(country_region) |>
+  filter(max(deaths) >= 10000) |> 
+  ungroup()
+print(large_deaths)
+```
+
+```{r}
+
+library(dplyr)
+#  the ggplot
+large_deaths |> 
+  ggplot(aes(x = date, y = deaths, color = country_region)) +
+  geom_point() +
+  scale_x_date(date_breaks = "4 months", date_labels = "%m-%d") +
+  scale_y_log10(labels = scales::comma) +
+  facet_wrap(vars(country_region), ncol = 2) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  theme(legend.position = "none")
+```
+
+#### Pie chart diagram
+
+```{r}
+library(ggplot2)
+
+top_5_countries <- selected_data |> 
+  arrange(desc(`2023-03-09`))  |>  
+  head(7) |> 
+  ungroup()
+print(top_5_countries)
+
+total_death <- sum(selected_data$`2023-03-09`, na.rm = TRUE)
+# Calculate the total deaths excluding the top 5 countries
+total_deaths_others <- total_death - sum(top_5_countries$`2023-03-09`, na.rm = TRUE)
+new_row <- tibble(
+  country_region = "Others",
+  `2023-03-09` = total_deaths_others
+)
+updated_tibble <- add_row(top_5_countries, !!!new_row)
+
+percentage = (updated_tibble$`2023-03-09`/total_death)*100.0
+updated_tibble <- as_tibble(updated_tibble) |> 
+  mutate(percentage) |> 
+  mutate(ypos = cumsum(percentage) - 0.5 * percentage )
+
+print(updated_tibble)
+
+# Create a pie chart
+pie_chart <- ggplot(updated_tibble, aes(x = "", y = percentage, fill = country_region)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(legend.position = "none") +
+  geom_text(aes(y = ypos, label = country_region, angle = 5), color = "white", size = 4) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "TOP 7 covids deaths")
+
+
+# Print the pie chart
+print(pie_chart)
+
+```
+
+```{r}
+# Create Data
+test <- data.frame(
+  group = LETTERS[1:5],
+  value = c(13,7,9,21,2)
+)
+test <- test |> 
+  arrange(desc(group)) |> 
+  mutate(prop = value / sum(test$value) * 100) |> 
+  mutate(ypos = cumsum(prop) - 0.5*prop )
+print(test)
+# Basic pie chart
+ggplot(test, aes(x = "", y = prop, fill = group)) +
+  geom_bar(stat = "identity", width = 1, color = "white") +
+  coord_polar("y", start = 0) +
+  theme_void() + 
+  theme(legend.position = "none") +
+  
+  geom_text(aes(y = ypos, label = group), color = "white", size = 6) +
+  scale_fill_brewer(palette = "Set1")
+```
+
+### World map by longtitude and latitude
+
+```{r}
+
+total_deaths_country <- covid19_deaths_global |> 
+  select(Long, Lat, last_col()) |> 
+  set_names("Long", "Lat", "deaths")
+print(head(covid19_deaths_global$`3/9/23`))
+head(total_deaths_country)
+
+world <- map_data("world")
+ggplot() +
+  geom_map(
+    data = world, map = world,
+    aes(long, lat, map_id = region),
+    color = "white", fill = "lightgray", size = 0.1
+  ) +
+  geom_point(
+    data = total_deaths_country,
+    aes(Long, Lat, 
+        color = "Red",
+        size = deaths),
+    alpha = 0.5
+  ) +
+  #labs(x = NULL, y = NULL, color = NULL)+
+  theme_void() +
+  theme(legend.position = "none") +
+  labs(title = "COVID-deaths")
+```
+
+```{r}
+
+world <- map_data("world")
+ggplot() +
+  geom_polygon(
+    data = world,
+    aes(x = long, y = lat, group = group),
+    fill = "grey", alpha = 0.3
+  ) +
+  geom_point(
+    data = total_deaths_country,
+    aes(x = Long, y = Lat, size = deaths, color = deaths),
+    stroke = F, alpha = 0.7
+  ) +
+  scale_size_continuous(
+    name = "deaths", trans = "log",
+    range = c(1, 7),
+    breaks = c(1, 20, 100, 1000, 50000),
+    labels = c("1-19", "20-99", "100-999", "1,000-49,999", "50,000+")
+  ) +
+  scale_color_viridis_c(
+    option = "inferno",
+    name = "deaths",
+    trans = "log",
+    breaks = c(1, 20, 100, 1000, 50000),
+    labels = c("1-19", "20-99", "100-999", "1,000-49,999", "50,000+")
+  ) +
+  theme_void() +
+  guides(colour = guide_legend()) +
+  labs(
+    title = "Mapping the coronavirus deaths",
+    caption = "Updates since "
+  ) +
+  theme(
+    legend.position = "bottom",
+    text = element_text(color = "#22211d"),
+    plot.background = element_rect(fill = "#ffffff", color = NA),
+    panel.background = element_rect(fill = "#ffffff", color = NA),
+    legend.background = element_rect(fill = "#ffffff", color = NA)
+  )
+```
+
+### Country Heatsmaps by deaths due to covid
+
+```{r}
+library(leaflet)
+library(sf)
+library(leaflet)
+library(dplyr)
+library(leaflet.extras)
+
+# Filter out missing or zero values
+total_deaths_country <- total_deaths_country |> 
+  filter(!is.na(deaths), deaths > 0)
+
+
+# Create a ggplot with heatmap
+leaflet() |> 
+  setView(lng = 0, lat = 30, zoom = 2) |>   # Adjust the initial view as needed
+  addProviderTiles("Esri.WorldTopoMap") |>   #different tile provider
+  addHeatmap(
+    data = sf_data,
+    radius = 15,  # Adjust the radius as needed
+    blur = 25,    # Adjust the blur as needed
+    max = max(total_deaths_country$deaths),
+    gradient = viridisLite::viridis(10, direction = -1)  # Adjust the color gradient
+  ) |> 
+  addLegend(
+    position = "bottomright",
+    pal = viridisLite::viridis(10, direction = -1),
+    values = total_deaths_country$deaths,
+    title = "deaths"
+  ) |> 
+  addScaleBar(position = "bottomright")
+```
+
+### Crossed analysis:
+
+
+#### COVID-19 deaths VS GDP
+
+
+#### COVID-19 deaths vs Population
+
+
+#### COVID 19 deaths vs Health
+
+
+#### COVID 19 deaths vs education
+
