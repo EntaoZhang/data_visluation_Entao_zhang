@@ -23,7 +23,7 @@ head(covid19_deaths_global)
 c("3/25/20", "03-25-20", "3-25/2020") |> lubridate::mdy()
 ```
 
-#### clean column names
+#### clean column names, tidy data 
 
 ```{r}
 install.packages("janitor")
@@ -93,7 +93,7 @@ data |>
 ```
 
 1)  y-axis in log_10
-2)  x-axis in month-year
+2)  x-axis in date-break, month-year
 
 ```{r}
 d1 <- data |> 
@@ -135,7 +135,7 @@ data_wide <- data |>
 print(data_wide)
 
 ```
-
+#### Total numbers of deaths after 2023-03-09 per each country
 ```{r}
 library(tidyverse)
 print(colnames(data_wide[,  ncol(data_wide)]))
@@ -150,14 +150,14 @@ print(selected_data)
 ggplot(selected_data, aes(x = country_region, y = `2023-03-09`)) +
   geom_bar(stat = "identity", fill = "skyblue") +
   labs(
-    title = "Data on 2023-03-09",
+    title = "Total numbers of deaths after 2023-03-09 per each country",
     x = "Country",
     y = "Value"
   ) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
 ```
 
-#### the contries with more than 10000 deaths
+#### the contries with more than 10,000 deaths
 
 ```{r}
 large_deaths <- data |> 
@@ -184,6 +184,7 @@ large_deaths |>
 ```
 
 #### Pie chart diagram
+#### TOP 7 countries of covids deaths
 
 ```{r}
 library(ggplot2)
@@ -218,7 +219,7 @@ pie_chart <- ggplot(updated_tibble, aes(x = "", y = percentage, fill = country_r
   theme(legend.position = "none") +
   geom_text(aes(y = ypos, label = country_region, angle = 5), color = "white", size = 4) +
   scale_fill_brewer(palette = "Set2") +
-  labs(title = "TOP 7 covids deaths")
+  labs(title = "TOP 7 coiuntry of covids deaths ")
 
 
 # Print the pie chart
@@ -249,7 +250,6 @@ ggplot(test, aes(x = "", y = prop, fill = group)) +
 ```
 
 ### World map by longtitude and latitude
-
 ```{r}
 
 total_deaths_country <- covid19_deaths_global |> 
@@ -279,7 +279,6 @@ ggplot() +
 ```
 
 ```{r}
-
 world <- map_data("world")
 ggplot() +
   geom_polygon(
@@ -295,21 +294,21 @@ ggplot() +
   scale_size_continuous(
     name = "deaths", trans = "log",
     range = c(1, 7),
-    breaks = c(1, 20, 100, 1000, 50000),
-    labels = c("1-19", "20-99", "100-999", "1,000-49,999", "50,000+")
+    breaks = c(1, 20, 100, 1000, 30000),
+    labels = c("1-19", "20-99", "100-999", "1,000-29,999", "30,000+")
   ) +
   scale_color_viridis_c(
     option = "inferno",
     name = "deaths",
     trans = "log",
-    breaks = c(1, 20, 100, 1000, 50000),
-    labels = c("1-19", "20-99", "100-999", "1,000-49,999", "50,000+")
+    breaks = c(1, 20, 100, 1000, 30000),
+    labels = c("1-19", "20-99", "100-999", "1,000-29,999", "30,000+")
   ) +
   theme_void() +
   guides(colour = guide_legend()) +
   labs(
-    title = "Mapping the coronavirus deaths",
-    caption = "Updates since "
+    title = "the coronavirus deaths MAP",
+    caption = "Updates since 03.2023 "
   ) +
   theme(
     legend.position = "bottom",
@@ -320,8 +319,9 @@ ggplot() +
   )
 ```
 
-### Country Heatsmaps by deaths due to covid
 
+
+#### Country Heatsmaps by deaths due to covid
 ```{r}
 library(leaflet)
 library(sf)
@@ -353,18 +353,40 @@ leaflet() |>
   ) |> 
   addScaleBar(position = "bottomright")
 ```
+### not plog_10 HIGLI
 
 ### Crossed analysis:
-
-
 #### COVID-19 deaths VS GDP
-
-
 #### COVID-19 deaths vs Population
-
-
 #### COVID 19 deaths vs Health
-
-
 #### COVID 19 deaths vs education
+```{r}
+library(tidyverse)
+
+library(tidyverse)
+library(jpeg)  # 如果使用jpeg格式的图像
+# 或
+# library(png)   # 如果使用png格式的图像
+
+df <- gapminder::gapminder %>%
+  filter(year == 2007)
+
+fig <- ggplot(df, aes(x = lifeExp, y = gdpPercap, label = country)) +
+  geom_point(color = "transparent") +
+  geom_raster(
+    aes(x = lifeExp, y = gdpPercap, image = country),
+    data = df,
+    hjust = 0.5, vjust = 0.5,
+    interpolate = TRUE,
+    width = df$pop / max(df$pop) * max(df$maxDim) * 0.2 + max(df$maxDim) * 0.05,
+    height = df$pop / max(df$pop) * max(df$maxDim) * 0.2 + max(df$maxDim) * 0.05,
+    alpha = 0.8
+  ) +
+  geom_text_repel() +
+  theme_minimal() +
+  ylim(c(-5e3, 55e3))
+
+fig
+
+```
 
