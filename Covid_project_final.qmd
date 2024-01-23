@@ -1,0 +1,782 @@
+---
+title: "Covid-19 Visualization"
+subtitle: "data visulization project"
+date: today
+date-modified: last-modified
+format:
+  revealjs: 
+    
+    chalkboard: 
+      buttons: true
+    preview-links: auto
+    #Slides
+    incremental: true 
+    slide-number: true
+    #Table of Contents
+    # toc: true
+    # toc-depth: 2
+    #toc-title: 
+    
+    css: css/styles.css
+    code-fold: true
+    code-summary: "Hidden code"
+    code-tools: true
+    
+    author: "Entao ZHANG"
+    footer: "Data visulization 2023-2024"
+editor: source
+---
+
+::: {.notes}
+Speaker notes go here.
+:::
+
+## 0. SetUp: load the pakages
+
+```{r setup}
+# install.packages("shiny")
+# install.packages("ggThemeAssist")
+```
+
+## First Dataset: Covid_19 by the CSSE
+```{r deaths, echo=TRUE}
+library(tidyverse)
+deaths_global <- read_csv("data/time_series_covid19_deaths_global.csv")
+names(deaths_global)
+
+head(deaths_global)
+deaths_global |> 
+  select(5, last_col()) |> 
+  colnames() 
+deaths_global
+
+death_new <- deaths_global |> 
+  group_by(`Country/Region`) |> 
+  summarize(across(starts_with("1/22/20"), sum, na.rm = TRUE),
+            .groups = "drop")
+print(death_new)
+```
+
+```{r recovered, echo=TRUE}
+library(tidyverse)
+recovered_global <- read_csv("data/time_series_covid19_recovered_global.csv")
+head(recovered_global)
+```
+
+```{r confirmed, echo=TRUE}
+library(tidyverse)
+confirmed_global <- read_csv("data/time_series_covid19_confirmed_global.csv")
+head(confirmed_global)
+```
+```{r testing, echo=TRUE}
+library(tidyverse)
+tests_global <- read_csv("data/time_series_covid19_tests_global.csv")
+head(tests_global)
+tests_global |> 
+  select(5, last_col()) |> 
+  colnames() 
+```
+
+
+## 1. Data Clean {background-color="aquamarine"}
+
+### 1) 1/22/20 to 2020-01-22 yy/mm/dd by using lubridate::mdy()
+
+```{r lubridate}
+c("3/25/20", "03-25-20", "3-25/2020") |> lubridate::mdy()
+```
+
+### use Country_code pakages to identify the iso_code and its continent of several countries 
+```{r countrycode }
+# Install and load the countrycode package
+# install.packages("countrycode")
+library(countrycode)
+
+# Create a small dataset
+continent_mapping <- data.frame(
+  country = c("United States", "Canada", "France", "China", "Brazil"),
+  continent = c("North America", "North America", "Europe", "Asia", "South America")
+)
+
+country_name <- "China"
+continent <- continent_mapping$continent[match(country_name, continent_mapping$country)]
+print(continent)
+
+iso_code <- countrycode("china", "country.name", "iso3c")
+print(iso_code)
+
+# Use the countrycode_data function to get latitude and longitude
+country_code <- "USA"  # Replace with the desired country code
+#geo_info <- countrycode_data(country_code, "iso3c", c("latitude", "longitude"))
+#
+# Extract latitude and longitude
+#latitude <- geo_info$latitude
+#longitude <- geo_info$longitude
+
+# Print latitude and longitude
+#print(c(latitude = latitude, longitude = longitude))
+```
+
+### clean column names, tidy data by load 'janitor'
+
+```{r janitor}
+# install.packages("janitor")
+```
+
+```{r provot_longer}
+library(janitor)
+library(tidyverse)
+data1 <- deaths_global |> 
+  pivot_longer(
+    cols = 5:ncol(deaths_global), # selected range 
+    names_to = "date",                       # The column names in the selected range stored in new column "date"
+    values_to = "deaths"                      # The values in the selected range stored in new column "date"
+  ) |> 
+  mutate(date = lubridate::mdy(date)) |> # parse the "date" column assuming that the dates are in the month-day-year format.
+  clean_names() |>      
+  mutate(deaths = as.integer(deaths)) |> # 
+  group_by(country_region, date) |> 
+  summarise(deaths = sum(deaths)) 
+data1
+
+data2 <- confirmed_global |> 
+  pivot_longer(
+    cols = 5:ncol(confirmed_global), # selected range 
+    names_to = "date",                       # The column names in the selected range stored in new column "date"
+    values_to = "confirmed"                      # The values in the selected range stored in new column "date"
+  ) |> 
+  mutate(date = lubridate::mdy(date)) |> # parse the "date" column assuming that the dates are in the month-day-year format.
+  clean_names() |>      
+  mutate(confirmed = as.integer(confirmed)) |> # 
+  group_by(country_region, date) |> 
+  summarise(confirmed = sum(confirmed)) 
+data2
+
+data3 <- recovered_global |> 
+  pivot_longer(
+    cols = 5:ncol(recovered_global), # selected range 
+    names_to = "date",                       # The column names in the selected range stored in new column "date"
+    values_to = "recovered"                      # The values in the selected range stored in new column "date"
+  ) |> 
+  mutate(date = lubridate::mdy(date)) |> # parse the "date" column assuming that the dates are in the month-day-year format.
+  clean_names() |>      
+  mutate(recovered = as.integer(recovered)) |> # 
+  group_by(country_region, date) |> 
+  summarise(recovered = sum(recovered)) 
+data3
+```
+
+## Data aggregation:
+
+```{r final_data}
+data <- left_join(data1, data2, by = c("country_region", "date")) |> 
+  left_join(data3, by = c("country_region", "date"))
+# Print the result
+head(data)
+```
+
+### Show all the countries name
+```{r distinct_country_name}
+data |> distinct(country_region)
+```
+## 1.2 Load second dataset
+#### data from dataBank: World Developement Indicators
+"https://databank.worldbank.org/source/world-development-indicators
+
+```{r country data}
+library(tidyverse)
+country_data <- read.csv("data/country_Data.csv") 
+head(country_data)
+country_data_original <- country_data |> 
+  clean_names()
+column_names <- colnames(country_data_original)
+print(column_names)
+```
+
+
+```{r clean country data}
+library(janitor)
+library(dplyr)
+
+country_data_cleaned <- country_data_original |> 
+  select(-c(4)) |>   # Remove third, fourth, and last column
+  rename_with(~ gsub("^x\\d+_yr(\\d+)$", "\\1", .), starts_with("x")) 
+# |>  mutate(across(starts_with("1960"), as.double, .names = "col_{.col}"))
+# Remove "X" from column names
+country <- country_data_cleaned |> 
+  mutate_all(~ ifelse(. == "..", NA, .))
+# Print the cleaned data frame
+print(country)
+```
+
+```{r second dataset}
+print(country)
+column_names = colnames(country)
+series = unique(country$series_name)
+print(column_names)
+print(series)
+nitrous_oxide_emissions <- country |> 
+  filter(series_name == "Nitrous oxide emissions (% change from 1990)")
+
+population_total <- country |> 
+  filter(series_name == "Population, total")
+
+population_male <- country |> 
+  filter(series_name == "Population, male")
+
+population_female <- country |> 
+  filter(series_name == "Population, female")
+
+population_growth <- country |> 
+  filter(series_name == "Population growth (annual %)")
+
+population_0_14_total <- country |> 
+  filter(series_name == "Population ages 0-14, total")
+
+population_0_14_male <- country |> 
+  filter(series_name ==  "Population ages 0-14, male" )
+
+population_0_14_female <- country |> 
+  filter(series_name ==  "Population ages 0-14, female")
+
+population_15_64_total <- country |> 
+  filter(series_name ==  "Population ages 15-64, total")
+
+population_15_64_male <- country |> 
+  filter(series_name == "Population ages 15-64, male" )
+
+population_15_64_female <- country |> 
+  filter(series_name == "Population ages 15-64, female")
+
+population_64_above_total <- country |> 
+  filter(series_name == "Population ages 65 and above, total")
+
+population_64_above_male <- country |> 
+  filter(series_name == "Population ages 65 and above, male")
+
+population_64_above_female <- country |> 
+  filter(series_name == "Population ages 65 and above, female")
+
+death_rate <- country |> 
+  filter(series_name == "Death rate, crude (per 1,000 people)")
+
+birth_rate <- country |> 
+  filter(series_name == "Birth rate, crude (per 1,000 people)")
+
+age_dependency_ratio <- country |> 
+  filter(series_name == "Age dependency ratio (% of working-age population)")
+
+age_dependency_ratio_young <- country |> 
+  filter(series_name == "Age dependency ratio, young (% of working-age population)")
+
+age_dependency_ratio_old <- country |> 
+  filter(series_name == "Age dependency ratio, old (% of working-age population)")
+
+current_health_expenditure <- country |> 
+  filter(series_name == "Current health expenditure (% of GDP)")
+
+hospital_beds <- country |> 
+  filter(series_name == "Hospital beds (per 1,000 people)")
+
+GDP <- country |> 
+  filter(series_name == "GDP (current US$)")
+
+GDP_growth <- country |> 
+  filter(series_name == "GDP growth (annual %)")
+
+Land_area <- country |> 
+  filter(series_name == "Land area (sq. km)")
+```
+
+## Plot 1: rose diagram: Top 30 confiremd cases country on 2020-04-28
+
+```{r data-rose}
+data_Rose <-  data |> 
+  filter(date == "2020-04-28") |> 
+  group_by(country_region)  |> 
+  summarise(confirmed = sum(confirmed, na.rm = TRUE),
+            deaths = sum(deaths, na.rm = TRUE))
+data_Rose
+```
+## Plot 1: rose diagram: Top 30 confiremd cases country on 2020-04-28
+
+```{r}
+global_30 <- data_Rose |> 
+  arrange(desc(data_Rose$confirmed)) |>  
+  slice( 1:30)
+
+global_30 <- global_30[order(global_30$confirmed),] |> 
+  mutate(country_region = factor(country_region,levels = country_region),
+       confirm1 = sqrt(confirmed),
+       id = seq( 1, 30, 1),
+       label = case_when(
+         id <= 15~ paste0(confirmed, "cases ", country_region), 
+         id <= 18~ paste0( "casesn",confirmed, "n",country_region), 
+         id <= 25~ paste0(confirmed, "casesn", country_region), 
+         T~ paste0(country_region, "n", confirmed, "n", "cases") ))
+print(global_30)
+
+```
+## Plot 1: rose diagram: Top 30 confiremd cases country on 2020-04-28
+
+```{r}
+p <- ggplot(global_30, aes(id, confirm1, fill = id,label = label)) +
+  geom_col(width = 1, color = 'white') + 
+  geom_col(aes(y = I( 40)), width = 1, alpha = 0.5, fill = 'white') +
+  geom_col(aes(y = I( 20)), width = 1, alpha = 0.2, fill = 'white') +
+  geom_col(aes(y = I( 10)), width = 1, color = 'white', fill = 'white')
+p
+```
+## Rose diagram 1
+```{r}
+p1 <- p + scale_y_sqrt() + 
+  coord_polar() + 
+  theme_void() +
+  theme(legend.position = "none") +
+  scale_fill_gradientn(colors = c( "darkgreen", "green", "orange", "red", "firebrick"), trans = 'sqrt') 
+p1
+```
+## rose diagram 2
+```{r,echo=FALSE}
+p2 <- p1 + 
+  geom_text(data = global_30 |> 
+              filter(id <= 15),
+            nudge_y = 5.5,
+            angle = 95 - 180 * c( 1:15) / 15,
+            fontface = "bold",
+            size = 1.5) +
+  geom_text(data = global_30 |> 
+              filter(between(id, 16, 18)),
+            nudge_y = -2,
+            color = "white",
+            fontface = "bold",
+            size = 1.2) +
+
+geom_text(data = global_30 |> 
+            filter(between(id, 19, 21)),
+          nudge_y = -1.7,
+          color = "white",
+          fontface = "bold",
+          size = 0.6) +
+
+geom_text(data = global_30 |>  
+            filter(between(id, 22, 25)),
+          nudge_y = -2.5,
+          color = "white",
+          fontface = "bold",
+          size = 0.2) +
+
+geom_text(data = global_30 |>  
+            filter(id >= 26),
+          nudge_y = -2.5,
+          angle = 80 - 75 * c( 1:5) / 5,
+          color = "white",
+          fontface = "bold",
+          size = 0.9)
+options(repr.plot.width = 16, repr.plot.height = 6)  # Adjust the width and height as needed
+p2
+```
+
+#### Population
+```{r}
+print(country)
+population_data <- country |> 
+  filter(series_name == "Population, total")
+        
+#Nitrous_oxide_emissions <- Nitrous_oxide_emissions |> 
+# mutate_at(vars(starts_with("1960")), ~as.integer(gsub("[^0-9]+", "", .)))
+print(population_data)
+
+print(ncol(population_data))
+
+population_longer <- population_data |> 
+  pivot_longer(
+    cols = 4:ncol(population_data),
+    names_to = "year",
+    values_to = "population"
+  ) |> 
+  mutate(population = as.numeric(population)) |> 
+  group_by(country_name, year) |> 
+  summarise(population = sum(population, na.rm = TRUE))
+print(population_longer)
+
+
+land_area <- country |> 
+  filter(series_name == "Land area (sq. km)")
+        
+#Nitrous_oxide_emissions <- Nitrous_oxide_emissions |> 
+# mutate_at(vars(starts_with("1960")), ~as.integer(gsub("[^0-9]+", "", .)))
+print(land_area)
+
+print(ncol(land_area))
+
+land_area_longer <- land_area |> 
+  pivot_longer(
+    cols = 4:ncol(land_area),
+    names_to = "year",
+    values_to = "area"
+  ) |> 
+  mutate(area = as.numeric(area)) |> 
+  group_by(country_name, year) |> 
+  summarise(area = sum(area, na.rm = TRUE))
+print(land_area_longer)
+```
+
+
+```{r}
+population_area <- left_join(population_longer, land_area_longer, by = c("country_name", "year"))
+print(population_area)
+library(dplyr)
+
+  
+population_density <- population_area |> 
+  mutate(year = as.integer(year),
+         population = as.integer(population),
+         population_density = population / area) |> 
+    filter(year == 2019)
+
+print(population_density)
+
+```
+
+
+```{r}
+print(data1)
+death_new <- data1 |> 
+  filter(date == "2023-03-09")
+
+population_density_join <- population_density |> 
+    select(country_name, population_density)
+print(population_density_join)
+
+death_new_join <- death_new |> 
+  select(country_region, deaths) |> 
+  rename(country_name = country_region)
+
+print(death_new_join)
+death_per_density <- inner_join(population_density_join, death_new_join, by = c("country_name")) |> 
+    mutate(death_per_po_density = deaths / population_density) |> 
+  select(-deaths, -population_density) |> 
+  arrange(desc(death_per_po_density))
+print(death_per_density)
+
+population_2019 <- population_density |> 
+  select(country_name, population)
+death_population <- inner_join(population_2019, death_new_join, by = c("country_name")) |> 
+    mutate(death_per_population = deaths / population) |> 
+  select(-deaths, -population) |> 
+  arrange(desc(death_per_population))
+print(death_population)
+```
+## Map plot 1: total deaths per population density by country
+```{r}
+library(sf)
+library(ggplot2)
+library(rnaturalearth)
+
+# Get world map data
+world <- ne_countries(returnclass = "sf")
+
+# Merge the death_per_density tibble with the world map based on country_name
+merged_data <- merge(world, death_per_density, by.x = "name", by.y = "country_name", all.x = TRUE)
+
+# Plot the map
+ggplot() +
+  geom_sf(data = merged_data, aes(fill = death_per_po_density), color = "white", lwd = 0.1) +
+  scale_fill_viridis_c() +  # You can choose other color scales as well
+  labs(title = "Death per Population Density by Country") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5))
+
+```
+## Map plot 1: total deaths per population by country
+
+```{r, echo=TRUE}
+library(sf)
+library(ggplot2)
+library(rnaturalearth)
+
+# Get world map data
+world <- ne_countries(returnclass = "sf")
+
+# Merge the death_per_density tibble with the world map based on country_name
+merged_data <- merge(world, death_population, by.x = "name", by.y = "country_name", all.x = TRUE)
+print(merged_data)
+# Plot the map
+ggplot() +
+  geom_sf(data = merged_data, aes(fill = death_per_population), color = "white", lwd = 0.1) +
+  scale_fill_viridis_c() +  # You can choose other color scales as well
+  labs(title = "Death per Population by Country") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5))
+
+```
+### Deaths VS GDP_population
+```{r, echo=TRUE}
+print(GDP)
+GDP_longer <- GDP |> 
+  pivot_longer(
+    cols = 4:ncol(GDP),
+    names_to = "year",
+    values_to = "GDP"
+  ) |> 
+  mutate(GDP = as.numeric(GDP)) |> 
+  group_by(country_name, year) |> 
+  summarise(GDP = sum(GDP, na.rm = TRUE)) 
+print(GDP_longer)
+print(population_longer)
+GDP_population <- left_join(population_longer, GDP_longer, by = c("country_name", "year"))
+print(GDP_population)
+GDP_population_2019 <- GDP_population |> 
+  mutate(year = as.integer(year),
+         population = as.integer(population),
+         GDP = as.integer(GDP),
+         GDP_population =  GDP / population) |> 
+    filter(year == 2019)
+print(GDP_population_2019)
+
+death_perGDP_population <- inner_join(GDP_population_2019, death_new_join, by = "country_name")
+
+print(death_perGDP_population)
+column_names_death_perGDP_population_2019 <- colnames(death_perGDP_population)
+print(column_names_death_perGDP_population_2019)
+```
+## Deaths VS GDP per population
+```{r, echo=TRUE}
+library(ggplot2)
+library(ggimage)
+library(countrycode)
+
+death_perGDP_population_filtred <- death_perGDP_population |> 
+  filter(!is.na(GDP_population))
+# Create a plot with country flags and log transformation
+ggplot(death_perGDP_population_filtred, aes(x = GDP_population, y = deaths)) +
+  geom_point() +
+  scale_x_log10() +
+  labs(title = "Deaths vs GDP_population",
+       x = "GDP_population",
+       y = "Deaths") +
+  theme_minimal()
+
+```
+
+```{r}
+print(data)
+```
+
+## Boxplot: COVID_19 cases in Luxembourg in 2020
+
+
+```{r, echo=TRUE}
+data_summary_longer_1 <- data |> 
+  pivot_longer(cols = c(deaths, confirmed, recovered), names_to = "type", values_to = "cases") 
+luxembourg_data_summary_longer_1 <- data_summary_longer_1 |> 
+  filter(country_region == "Luxembourg", year(date) == 2020, month(date) <= 6)
+print(luxembourg_data_summary_longer_1)
+
+ggplot(luxembourg_data_summary_longer_1, aes(date, cases, color = type)) +
+  geom_path(size = 1) +
+  ylab("Total cases") + ggtitle("COVID-19 cases in Luxembourg") + 
+  scale_x_date(date_breaks = "1 month", date_labels = "%m-%y") + 
+  scale_color_manual("", values = c("firebrick","steelblue","grey")) +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 1),
+        legend.position = "bottom")
+
+
+```
+## Boxplot: COVID_19 cases in Luxembourg in 2020
+
+```{r, echo=TRUE}
+library(tidyverse)
+
+luxembourg_data_summary <- data |> 
+  filter(country_region == "Luxembourg", year(date) == 2020, month(date) <= 6) |> 
+  mutate(month = format(date, "%Y-%m")) |> 
+  group_by(month) |> 
+  summarize(deaths = sum(deaths),
+            confirmed = sum(confirmed),
+            recovered = sum(recovered))
+
+print(luxembourg_data_summary)
+
+luxembourg_data_summary_longer <- luxembourg_data_summary |> 
+  pivot_longer(cols = c(deaths, confirmed, recovered), names_to = "type", values_to = "cases") 
+print(luxembourg_data_summary_longer)
+ggplot(luxembourg_data_summary_longer, aes(month, cases, color = type)) +
+  geom_boxplot() + 
+  ylab("Total cases") + ggtitle("COVID-19 cases in Luxembourg") +
+  scale_color_manual("",                       breaks = c("deaths", "confirmed", "recovered"),
+values = c("firebrick","steelblue","grey")) +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 30, hjust = 1),
+        legend.position = "bottom")
+```
+
+## Slected 10 countries: 
+
+```{r, echo=TRUE}
+library(tidyverse)
+
+# Assuming you already have data_summary_longer_1
+
+# Select the  10 countries
+select_10_countries <- data_summary_longer_1 |> 
+    filter(country_region %in% c("USA", "China", "Italy", "Germany", "Spain", "France", "UK", "Iran", "Netherlands", "Belgium"))
+
+select_10_countries_confirmed <- select_10_countries |> 
+  filter(type == "confirmed")
+
+# Create a line plot for the "confirmed" type for the 10 countries
+ggplot(select_10_countries_confirmed, aes(x = date, y = cases, group = country_region, color = country_region)) +
+  geom_line(size = 1.5) +  # Adjust the size parameter to your preference
+  geom_text(data = select_10_countries_confirmed |> 
+              group_by(country_region) |> 
+              filter(date == max(date)),
+            aes(label = country_region, x = max(date), y = cases, color = country_region),
+            box.padding = 0.5, size = 3) +  # Adjust hjust and vjust for label position
+  labs(title = "Confirmed Cases for 10 Countries",
+       x = "Year",
+       y = "Confirmed Cases",
+       color = "Country") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+```
+## Total Deaths in 2021 for 10 Countries
+```{r, echo=TRUE}
+library(countrycode)
+select_10_countries_deaths <- select_10_countries |> 
+  filter(type == "deaths")
+print(select_10_countries_deaths)
+select_10_countries_deaths_summary <- select_10_countries_deaths |> 
+  group_by(country_region, year = lubridate::year(date), type) |> 
+  summarize(total_deaths = sum(cases))
+print(select_10_countries_deaths_summary)
+select_10_countries_deaths_summary_2021 <- select_10_countries_deaths_summary |> 
+  filter(year == 2021) |> 
+  arrange(desc(total_deaths))
+print(select_10_countries_deaths_summary_2021)
+
+my_palette <- c("Americas" = "#0084ff", "Asia" = "#44bec7", "Europe" = "#ffc300", "Oceania" = "#fa3c4c")
+select_10_countries_deaths_summary_2021$iso2 <- countrycode(select_10_countries_deaths_summary_2021$country_region, "country.name", "iso2c")
+
+select_10_countries_deaths_summary_2021$continent <- countrycode(select_10_countries_deaths_summary_2021$iso2, "iso2c", "continent")
+print(select_10_countries_deaths_summary_2021)
+# Create a bar plot
+
+bar_plot <- select_10_countries_deaths_summary_2021 |>  ggplot(aes(x = total_deaths, y = reorder(country_region, total_deaths), fill = continent)) +
+  geom_col() +
+  geom_flag(aes(x = total_deaths + 1600000, y = country_region, image = iso2),size = 0.1) +
+  labs(title = "Total Deaths in 2021 for 10 Countries",
+       x = "Total Deaths",
+       y = "Country") +
+  scale_fill_manual(values = my_palette) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+        axis.text.y = element_text(size = 8))
+print(bar_plot)
+
+```
+
+
+## Hospital bed VS deaths
+
+```{r, echo=TRUE}
+print(hospital_beds)
+hospital_beds_longer <- hospital_beds |> 
+  pivot_longer(
+    cols = 4:ncol(hospital_beds),
+    names_to = "year",
+    values_to = "hospital_beds"
+  ) |> 
+  mutate(hospital_beds = as.numeric(hospital_beds)) |> 
+  group_by(country_name, year) |> 
+  summarise(hospital_beds = sum(hospital_beds, na.rm = TRUE)) |> 
+  mutate(year = as.integer(year))
+print(hospital_beds_longer)
+hospital_beds_2019 <- hospital_beds_longer |> 
+  filter(year == 2019)
+print(hospital_beds_2019)
+```
+## Hospital bed VS deaths
+
+```{r, echo=TRUE}
+hospital_beds_2019 <- hospital_beds_longer |> 
+  filter(year == 2019 & hospital_beds > 0)
+hospital_beds_2019
+data_hos <- data_summary_longer_1 |> 
+  group_by(country_region, year = year(date), type) |> 
+  summarize(cases = sum(cases))
+data_hos <- data_hos |> 
+  select(-year)
+
+print(data_hos)
+
+data_hos_summary <- data_hos |> 
+  filter(year == 2020, type == "deaths") |> 
+  rename(country_name = country_region) |> 
+  select(-year, -type)
+
+print(data_hos_summary)
+data_hosptial_bed <- inner_join(data_hos_summary, hospital_beds_2019, by = "country_name")
+
+print(data_hosptial_bed)
+
+
+
+ggplot(data_hosptial_bed, aes(y = cases, x = hospital_beds, size = cases)) +
+  geom_point(aes(color = country_name), alpha = 0.7) +
+  scale_size_continuous(range = c(3, 15)) +
+  labs(title = "total deaths vs Hospital Beds",
+       y = "Total Deaths due to COVID-19",
+       x = "Total Hospital Beds",
+       color = "Country") + 
+  theme(legend.position = "bottom")
+```
+
+
+## other factor related to COVID-19: NO_2, the age distribution of the population.
+
+
+
+```{r}
+hospital_beds_2018 <- hospital_beds_longer |> 
+  filter(year == 2018 & hospital_beds > 0)
+hospital_beds_2018
+```
+
+
+
+
+
+```{r}
+```{r}
+
+# Fit a linear model with logarithmic transformation
+log_model <- lm(log(total_confirmed) ~ days_since_reference, data = model_data)
+
+# Extract coefficients
+a <- exp(coef(log_model)[1])
+b <- coef(log_model)[2]
+
+# Generate predictions from the fitted model
+model_data$predicted <- a * exp(b * model_data$days_since_reference)
+
+# Plot the data points and the fitted exponential curve
+library(ggplot2)
+
+ggplot(model_data, aes(x = days_since_reference, y = total_confirmed)) +
+  geom_point() +
+  geom_line(aes(y = predicted), color = "red") +
+  labs(
+    x = "Days Since 2020-01-22",
+    y = "Total Confirmed",
+    title = "Exponential Fit to COVID-19 Data (Logarithmic Transformation)"
+  ) +
+  theme_minimal()
+
+```
+```
+
+
