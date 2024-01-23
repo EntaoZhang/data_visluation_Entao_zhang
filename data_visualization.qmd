@@ -79,7 +79,6 @@ ggplot(lux_plot_data, aes(x = Year, y = Oil_Consumption)) +
 
 ```
 
-
 ```{r}
 library(ggplot2)
 usa_data <- oil_tibble |> 
@@ -328,7 +327,9 @@ covid19_confirmed_global <- read_csv("data/time_series_covid19_confirmed_global.
 head(covid19_confirmed_global)
 glimpse(covid19_confirmed_global)
 ```
-### Data Clean 
+
+### Data Clean
+
 ```{r}
 install.packages("janitor")
 ```
@@ -350,8 +351,6 @@ d1
 
 ```
 
-
-
 ```{r}
 # Install and load required packages
 install.packages("ggplot2")
@@ -361,8 +360,6 @@ install.packages("gapminder")
 install.packages("countrycode")
 
 ```
-
-
 
 ```{r}
 library(ggplot2)

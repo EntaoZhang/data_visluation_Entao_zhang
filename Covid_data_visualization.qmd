@@ -1,0 +1,952 @@
+---
+title: "Covid-19 Visualization"
+subtitle: "data visulization project"
+date: today
+date-modified: last-modified
+format:
+  revealjs: 
+    
+    chalkboard: 
+      buttons: true
+    preview-links: auto
+    #Slides
+    incremental: true 
+    slide-number: true
+    #Table of Contents
+    # toc: true
+    # toc-depth: 2
+    #toc-title: 
+    
+    css: css/styles.css
+    code-fold: true
+    code-summary: "Hidden code"
+    code-tools: true
+    
+    author: "Entao ZHANG"
+    footer: "Data visulization Project. COVID-19"
+editor: source
+---
+
+
+## 0. SetUp: load all the pakages
+
+```{r setup, echo=TRUE}
+# install.packages("shiny")
+# install.packages("ggThemeAssist")
+# install.packages("viridis")
+# install.packages("minpack.lm")
+# install.packages("ggrepel")
+# install.packages("prismatic")
+# install.packages("paletteer")
+library(ggimage)
+
+
+library(sf)
+library(rnaturalearth)
+library(emojifont)
+
+library(ggrepel)
+library(tidyverse)
+library(janitor)
+library(lubridate)
+library(countrycode)
+library(viridis)
+library(minpack.lm)
+library(prismatic)
+library(paletteer)
+#library(ggflags)
+
+
+
+
+# renv::snapshot()
+# renv::init()
+
+#renv::restore()
+
+```
+
+::: {.notes}
+Speaker notes go here.
+:::
+## Dataset
+ 
+::: {.panel-tabset}
+
+### COVID-19 Dataset 
+
+COVID-19 Data Repository by the Center for Systems Science and Engineering (CSSE) at Johns Hopkins University
+https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data/csse_covid_19_time_series
+Our word in data
+
+### WDI
+
+The World Development Indicators (WDI) database, managed by the World Bank, is a comprehensive resource that includes a wide range of economic, social, environmental, and demographic data for countries around the world.
+
+:::
+
+## Load data
+```{r load dataset, echo= FALSE}
+
+# load the covid 19 deaths global  CSV file
+# deaths in time series
+deaths_global <- read_csv("data/time_series_covid19_deaths_global.csv",show_col_types = FALSE) 
+
+# global deaths cases in time series
+confirmed_global <- read_csv("data/time_series_covid19_confirmed_global.csv",show_col_types = FALSE) 
+
+# recovered_ global dataset 
+recovered_global <- read_csv("data/time_series_covid19_recovered_global.csv",show_col_types = FALSE)
+
+# tests and vaccinations dataset from our world in data
+tests_global <- read_csv("data/time_series_covid19_tests_global.csv",show_col_types = FALSE) 
+vaccinations_global <- read_csv("data/time_series_covid19_vaccination_global.csv",show_col_types = FALSE) 
+# emissions 
+emissions_population_GDP <- read_csv("data/Emissions_Population_GDP.csv",show_col_types = FALSE) 
+```
+
+
+## Explore the data set structure
+```{r explore data,  echo=FALSE, results='asis'}
+names(deaths_global)
+names(confirmed_global)
+names(recovered_global)
+names(tests_global)
+names(vaccinations_global)
+glimpse(deaths_global)
+
+names(emissions_population_GDP)
+glimpse(emissions_population_GDP)
+```
+
+
+## data Clean
+```{r data clean, echo=TRUE}
+
+# Cleaning column names with janitor
+deaths_global_cleaned <- deaths_global |> 
+  janitor::clean_names() |> 
+  rename_with(
+    .cols = starts_with("x"), 
+    .fn = ~lubridate::mdy(str_replace_all(.x, "x", "")) |>
+           format("%Y-%m-%d")
+  )
+
+head(deaths_global_cleaned)
+
+# Cleaning column names with janitor
+confirmed_global_cleaned <- confirmed_global |> 
+  janitor::clean_names() |> 
+  rename_with(
+    .cols = starts_with("x"), 
+    .fn = ~lubridate::mdy(str_replace_all(.x, "x", "")) |>
+           format("%Y-%m-%d")
+  )
+head(confirmed_global_cleaned)
+
+# Cleaning column names with janitor
+recovered_global_cleaned <- recovered_global |> 
+  janitor::clean_names() |> 
+  rename_with(
+    .cols = starts_with("x"), 
+    .fn = ~lubridate::mdy(str_replace_all(.x, "x", "")) |>
+           format("%Y-%m-%d")
+  )
+head(recovered_global_cleaned)
+
+tests_global_cleaned <- tests_global |>
+  janitor::clean_names() |> 
+  mutate(date = ymd(day)) |> 
+  select(entity, date, new_tests_per_thousand_7day_smoothed) |> 
+  rename(country_region = entity)
+  
+head(tests_global_cleaned)
+names(tests_global_cleaned)
+
+vaccinations_global_cleaned <- vaccinations_global |>
+  janitor::clean_names() |> 
+  mutate(date = ymd(vaccinations_global$date)) |> 
+  select(-c(4:14),-iso_code) |> 
+  rename(country_region = location)
+  
+head(vaccinations_global_cleaned)
+
+
+emissions_population_GDP_cleaned <- emissions_population_GDP |> 
+  janitor::clean_names() |> 
+  rename_at(vars(starts_with("x")), 
+                       ~str_replace(., "x\\d+_(yr)?", "")) |> 
+  rename(country_region = country_name, iso_code = country_code) |> 
+  select(-series_code) |> 
+  mutate(across(everything(), ~if_else(. == "..", NA, .)))
+print(emissions_population_GDP_cleaned)
+
+# print the all different series name
+distinct_series_names <- distinct(emissions_population_GDP_cleaned, series_name) |> 
+  filter(!is.na(series_name)) # Filter out rows where series_name is NA
+# Print the distinct series names
+print(distinct_series_names) 
+```
+
+
+## summary and reshape data to long format 
+
+```{r summary and reshape into long, echo=TRUE}
+
+
+deaths_global_summary <- deaths_global_cleaned |> 
+  group_by(country_region) |> 
+  summarize(
+    lat = mean(lat, na.rm = TRUE),
+    long = mean(long, na.rm = TRUE),
+    across(starts_with("2020"), sum, na.rm = TRUE))
+
+confirmed_global_summary <- confirmed_global_cleaned |> 
+  group_by(country_region) |> 
+  summarize(
+    lat = mean(lat, na.rm = TRUE),
+    long = mean(long, na.rm = TRUE),
+    across(starts_with("2020"), sum, na.rm = TRUE))
+
+recovered_global_summary <- recovered_global_cleaned |> 
+  group_by(country_region) |> 
+  summarize(
+    lat = mean(lat, na.rm = TRUE),
+    long = mean(long, na.rm = TRUE),
+    across(starts_with("2020"), sum, na.rm = TRUE))
+print(recovered_global_summary)
+
+
+deaths_global_long <- deaths_global_summary |> 
+  pivot_longer(
+    cols = -c(lat, long, country_region),
+  names_to = "date",# The column names  in new column "date"
+    values_to = "deaths" # The values in new column "date"
+
+) |> 
+  mutate(date = ymd(date)) |>
+  select(lat, long, country_region, date, deaths)
+
+print(deaths_global_long)
+
+confirmed_global_long <- confirmed_global_summary |> 
+  pivot_longer(
+    cols = -c(lat, long, country_region),
+  names_to = "date",# The column names  in new column "date"
+    values_to = "confirmed" # The values in new column "date"
+
+) |> 
+  mutate(date = ymd(date)) |>
+  select(lat, long, country_region, date, confirmed)
+
+print(confirmed_global_long)
+
+recovered_global_long <- recovered_global_summary |> 
+  pivot_longer(
+    cols = -c(lat, long, country_region),
+  names_to = "date",# The column names  in new column "date"
+    values_to = "recovered" # The values in new column "recovered"
+
+) |> 
+  mutate(date = ymd(date)) |>
+  select(lat, long, country_region, date, recovered)
+
+print(recovered_global_long)
+
+```
+## Combine long format COVID data
+```{r merge, echo=TRUE}
+covid_data <- deaths_global_long |> 
+    left_join(confirmed_global_long, 
+              by = c("lat", "long", "country_region", "date")) |> left_join(recovered_global_long, 
+              by = c("lat", "long", "country_region", "date")) |> 
+  full_join(vaccinations_global_cleaned, by = c("country_region", "date")) |> 
+  full_join(tests_global_cleaned, by = c("country_region", "date")) |> 
+  ungroup()
+
+iso_codes <- countrycode(covid_data$country_region, "country.name", "iso3c")
+covid_data <- covid_data |> 
+  add_column(iso_code = iso_codes, .after = 2)
+head(covid_data) 
+names(covid_data)
+```
+
+### reshape long wide
+```{r nested tibble, echo=TRUE}
+print(emissions_population_GDP_cleaned)
+names(emissions_population_GDP_cleaned)
+series_names <-  emissions_population_GDP_cleaned |> 
+  distinct(series_name) |> 
+  pull(series_name) |> 
+  as.list()
+# print(series_names[[1]])
+
+emissions_population_GDP_wider <- emissions_population_GDP_cleaned |> 
+  pivot_longer(cols = 4:last_col(), names_to = "year", values_to = "value") |> 
+  mutate(
+    year = as.integer(year),
+    value = replace(as.numeric(value), value == "..", NA)
+
+         ) |> 
+  pivot_wider(names_from = "series_name", values_from = "value") |> 
+  unnest(everything()) 
+
+  
+print(emissions_population_GDP_wider)
+```
+## nest emissions_population_GDP dataset 
+```{r nest, echo=TRUE}
+emissions_population_GDP_nested <- emissions_population_GDP_wider |> 
+  group_by(iso_code, country_region) |> 
+  nest(emissions = c(3, 4:7),
+       population = c(3, 8:57),
+       gdp = c(3, 58:last_col())) |> 
+  ungroup()
+names(emissions_population_GDP_nested)
+print(emissions_population_GDP_nested)
+
+```
+## unnest and list-columns
+
+```{r}
+emissions_population_GDP_germany <- emissions_population_GDP_nested |>
+  filter(country_region == "Germany") |>
+  select(-c(4,5)) |> 
+  unnest(emissions) 
+print(emissions_population_GDP_germany)
+```
+## Exploratory data in time series 
+
+
+### Plot 1:  Trends in the total number of confirmed people in the world 
+
+```{r}
+n_date <- 101
+reference_date <- ymd("2020-01-22")
+end_date <-  ymd("2020-01-22") + n_date
+
+
+model_data <- covid_data |> 
+  select(c(country_region, date, confirmed)) |> 
+  filter(date < as.Date(end_date)) |> 
+  na.omit() |> 
+  group_by(date) |> 
+  summarise(total_confirmed = sum(confirmed)) |> 
+  mutate(days_since_reference = as.numeric(date - reference_date)) 
+
+summary(model_data)
+
+# Fit an exponential model using nlsLM
+exponential_model <- nlsLM(
+  total_confirmed ~ a * exp(b * days_since_reference),
+  data = model_data,
+  start = list(a = max(model_data$total_confirmed), b = 0.01)
+
+)
+
+# Extract coefficients
+a <- coef(exponential_model)[1]
+b <- coef(exponential_model)[2]
+
+
+# Generate predictions from the fitted model
+model_data$predicted <- predict(exponential_model, newdata = model_data)
+
+ggplot(model_data, aes(x = days_since_reference, y = total_confirmed)) +
+  geom_point() + 
+  geom_line(aes(y = predicted), color = "red") +
+  scale_x_continuous(
+    breaks = seq(0, n_date, by = 5), 
+    labels = seq(0, n_date, by = 5)
+    ) +
+  scale_y_continuous(
+    breaks = seq(0, 3500000, by = 250000),
+    labels = scales::comma
+  ) +
+  labs(
+    x = "Days Since 2020-01-22",
+    y = "Total Confirmed",
+    title = "Exponential Fit to COVID-19 Data (Logarithmic Transformation)"
+  ) +
+  theme_minimal()
+
+```
+
+### Plot 2:  Trends in the  number of confirmed cases in 6 random countries 
+
+
+
+```{r}
+selected_countries <- covid_data |> 
+  select(country_region) |> 
+  distinct() |> 
+  sample_n(6)
+
+# Filter the dataset to include all dates for the selected countries
+random_country_data <- covid_data |> 
+  filter(country_region %in% selected_countries$country_region)
+print(random_country_data)
+
+
+min_date <- min(random_country_data$date)
+max_date <- max(random_country_data$date)
+
+n_date <- 101
+reference_date <- ymd("2020-01-22")
+end_date <-  ymd("2020-01-22") + n_date
+
+
+
+six_country_data <- random_country_data |> 
+  select(c(country_region, date, confirmed)) |> 
+  filter(date < as.Date(end_date)) |> 
+  na.omit() |> 
+  group_by(country_region, date) |> 
+  summarise(total_confirmed = sum(confirmed)) |> 
+  mutate(days_since_reference = as.integer(date - reference_date)) |> 
+  ggplot(aes(x = date, y = total_confirmed, color = country_region)) +
+  geom_point()  +
+  facet_wrap(vars(country_region), ncol = 2, scales = "free_y") + 
+  scale_x_continuous(breaks = seq(0, 100, by = 5)) + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  ) +
+  theme(legend.position = "none")
+
+
+print(six_country_data)
+```
+
+
+## The country with the longest epidemic
+```{r}
+time_period <- covid_data |> 
+  select(c(country_region, date, confirmed)) |> 
+  na.omit() |> 
+  group_by(country_region) |> 
+   filter(confirmed >= 100) |> 
+   mutate(days_since_100 = 0:(n() - 1)) |> 
+  ungroup()
+time_period
+
+highlight_country <- time_period |> 
+  group_by(country_region) |> 
+  filter(days_since_100 == max(days_since_100)) |> 
+  ungroup() |> 
+  arrange(desc(days_since_100)) |> 
+  top_n(10, days_since_100) |> 
+  pull(country_region)
+
+highlight_country
+
+cgroup_cols <- c(prismatic::clr_darken(paletteer_d("ggsci::category20_d3"), 0.2)[1:length(highlight_country)], "white")
+scales::show_col(cgroup_cols)
+
+
+time_period |> 
+  group_by(country_region) |> 
+  filter(max(days_since_100) > 9) |> 
+  mutate(
+    end_label = ifelse(days_since_100 == max(days_since_100), country_region, NA_character_)
+  ) |> 
+  mutate(end_label = case_when(country_region %in% highlight_country ~ end_label,
+                               TRUE ~ NA_character_), 
+         cgroup = case_when(country_region %in% highlight_country ~ country_region, 
+                            TRUE ~ "ZZOTHER")) |> 
+  ggplot(aes(x = days_since_100, y = confirmed, 
+         color = cgroup, label = end_label, 
+         group = country_region)) + 
+  geom_line(linewidth = 0.8) + 
+  geom_text_repel(nudge_x = 1.1,
+                  nudge_y = 0.1, 
+                  segment.color = NA) + 
+  guides(color = FALSE) + 
+  scale_color_manual(values = cgroup_cols) +
+  scale_y_continuous(labels = scales::comma_format(accuracy = 1), 
+                     breaks = 10^seq(2, 8),
+                     trans = "log10"
+                     ) + 
+  labs(x = "Days Since 100 Confirmed Death", 
+       y = "Cumulative Number of Deaths (log10 scale)", 
+       title = "Cumulative Number of Reported Deaths from COVID-19, Selected Countries")
+```
+
+
+## DV 2: Nightingale rose chart
+
+
+
+```{r}
+data_Rose <-  covid_data |> 
+  filter(date == "2020-04-29") |> 
+  group_by(country_region)  |> 
+  summarise(confirmed = sum(confirmed, na.rm = TRUE),
+            deaths = sum(deaths, na.rm = TRUE))
+
+
+global_26 <- data_Rose |> 
+  arrange(desc(data_Rose$confirmed)) |>  
+  slice( 1:26)
+
+global_26 <- global_26[order(global_26$confirmed),] |> 
+  data.frame(id = 1:26,
+             height = c(seq(100, 550, 20),
+                        seq(650, 700, 20))) |> 
+  mutate(
+       label = case_when(
+         id <= 13 ~ paste0(height, " ", country_region, ""),
+         id <= 21 ~ paste0(height, "\n", country_region, ""),
+         T ~ paste0(country_region, "\n", height, "")
+       )
+  )
+print(global_26)
+
+p <- ggplot(global_26, aes(x = id, y = height, label = label)) +
+  geom_col(aes(fill = id), width = 1, size = 0) + 
+  geom_col(aes(y = 40), fill = "white", width = 1, alpha = 0.2, size = 0) +
+  geom_col(aes(y = 20), fill = 'white', width = 1, alpha = 0.2, size = 0)
+
+p2 <- p +
+  coord_polar() +
+  theme_void() +
+  scale_y_continuous(limits = c(-60, 701)) 
+
+p3 <- p2 + 
+  geom_text(data = global_26 |> 
+              filter(id <= 13),
+            nudge_y = 80,
+            angle = 95 - 180 * c( 1:13) / 13,
+            fontface = "bold") +
+  geom_text(data = global_26 |> 
+              filter(between(id, 14, 21)),
+            nudge_y = -55,
+            nudge_x = -0.1,
+            color = "white",
+            fontface = "bold") +
+  geom_text(data = global_26 |>  
+            filter(id >= 22),
+          nudge_y = -50,
+          angle = 80 - 75 * c( 1:5) / 5,
+          color = "white",
+          fontface = "bold") +
+  scale_fill_viridis(discrete = FALSE) +
+  guides(fill = "none")
+p3
+ggsave("Rose23.png", p3, width = 18, height = 20, units = "in") 
+
+```
+
+
+```{r}
+library(ggplot2)
+library(viridis)
+
+data_Rose <-  covid_data |> 
+  filter(date == "2020-04-29") |> 
+  group_by(country_region)  |> 
+  summarise(confirmed = sum(confirmed, na.rm = TRUE),
+            deaths = sum(deaths, na.rm = TRUE))
+
+
+rose_26 <- data_Rose |> 
+  arrange(desc(data_Rose$confirmed)) |>  
+  slice( 1:26) |> 
+  data.frame(id = 1:26,
+             height = c(seq(100, 550, 20),
+                        seq(650, 700, 20))) 
+rose_26
+rose_26$id <- rev(rose_26$id)
+rose_26 <- rose_26 |> 
+  mutate(sqrt_confirmed = sqrt(confirmed)) |> 
+  mutate(
+    label = case_when(
+      id <= 12 ~ paste0(country_region, " ", confirmed),
+      id <= 21 ~ paste0(country_region, "\nC: ", confirmed, "\nD: ", deaths),
+      TRUE ~ paste0(country_region , "C:", confirmed, "\nD: ", deaths)
+    )
+  )
+
+
+
+print(rose_26)
+```
+
+```{r}
+
+p <- ggplot(rose_26, aes(x = id, y = sqrt_confirmed, label = label)) +
+  geom_col(aes(fill = id), width = 1, size = 0) + 
+  geom_col(aes(y = 40), fill = "white", width = 1, alpha = 0.2, size = 0) +
+  geom_col(aes(y = 20), fill = 'white', width = 1, alpha = 0.2, size = 0)
+p
+
+```
+
+```{r}
+
+p2 <- p +
+  coord_polar() +
+  theme_void() +
+  scale_y_continuous(limits = c(-200, 2100)) 
+
+p3 <- p2 + 
+  geom_text(data = rose_26 |> 
+              filter(id <= 12),
+            nudge_y = 280,
+            angle = -(95 - 180 * c(1:12) / 12),
+            fontface = "bold") +
+  geom_text(data = rose_26 |> 
+              filter(between(id, 13, 21)),
+            nudge_y = 55,
+            nudge_x = 0.1,
+            color = "white",
+            fontface = "bold") +
+  geom_text(data = rose_26 |>  
+              filter(id >= 22),
+            nudge_y = -115,
+            angle = 75 * c(1:5) / 5 ,
+            color = "white",
+            fontface = "bold") +
+  scale_fill_viridis(discrete = FALSE) +
+  guides(fill = "none")
+p3
+# Save the modified plot
+ggsave("Rose24.png", p3, width = 12, height = 18, units = "in")
+```
+
+
+
+## TOP 10 in Total Deaths in 2021 
+```{r, echo=TRUE}
+select_10_countries <- covid_data |> 
+    filter(country_region %in% c("US", "China", "Italy", "Germany", "Spain", "France", "Luxembourg", "Iran", "Netherlands", "Belgium"))
+
+print(select_10_countries)
+
+select_10_countries_summary <- select_10_countries |> 
+  group_by(country_region, iso_code) |> 
+  filter(year(date) == 2020) |> 
+  summarize(total_deaths_2020 = sum(confirmed, na.rm = TRUE)) |> 
+  arrange(desc(total_deaths_2020))
+print(select_10_countries_summary)
+
+my_palette <- c("Americas" = "#0084ff", "Asia" = "#44bec7", "Europe" = "#ffc300", "Oceania" = "#fa3c4c")
+select_10_countries_summary$iso2 <- countrycode(select_10_countries_summary$country_region, "country.name", "iso2c")
+
+
+select_10_countries_summary$continent <- countrycode(select_10_countries_summary$iso2, "iso2c", "continent")
+print(select_10_countries_summary)
+
+
+
+bar_plot <- select_10_countries_summary |>  
+ggplot(aes(x = total_deaths_2020, y = reorder(country_region, total_deaths_2020), fill = continent)) +
+  geom_col() +
+  geom_flag(aes(x = total_deaths_2020 + 10000000 , y = country_region, image = iso2), size = 0.07) +
+  theme(axis.text.y = element_blank()) +
+  labs(title = "Total Deaths in 2020 for slected 10 Countries",
+       x = "Total Deaths 2020",
+       y = "Country") +
+  scale_fill_manual(values = my_palette) +
+  theme_minimal()
+print(bar_plot)
+
+```
+
+##  Spatial data 
+
+```{r}
+population_2019 <- emissions_population_GDP_nested |> 
+  select(-c(2,3,5)) |> 
+  unnest(population) |> 
+  filter(year == 2019)
+print(population_2019)
+
+deaths_2020_summary <- covid_data  |> 
+  filter(year(date) == 2020) |> 
+  group_by(lat, long, iso_code, country_region) |> 
+  summarize(total_deaths_2020 = sum(deaths, na.rm = TRUE),
+            total_confirmed_2020 = sum(confirmed, na.rm = TRUE),
+            total_recovered_2020 = sum(recovered, na.rm = TRUE))
+
+
+
+population_total_2019 <-  population_2019 |> 
+  select(c(country_region, `Population, total`))
+
+
+covid_data_population <- deaths_2020_summary |> 
+  left_join(population_total_2019, by = "country_region") |> 
+  na.omit() |> 
+  mutate(deaths_population = total_deaths_2020 / `Population, total`,
+         confirmed_population = total_confirmed_2020 / `Population, total`,
+         recovered_population = total_recovered_2020 / `Population, total`,
+         max_size = pmax(deaths_population, confirmed_population, recovered_population,na.rm = TRUE)
+         )
+print(covid_data_population)
+
+
+# Get world map data
+world <- ne_countries(returnclass = "sf")
+
+# Merge the death_per_density tibble with the world map based on country_name
+merged_data <- merge(world, covid_data_population, by.x = "name", by.y = "country_region", all.x = TRUE)
+
+# Plot the map
+ggplot() +
+  geom_sf(data = merged_data, aes(fill = deaths_population), color = "white", lwd = 0.1) +
+  scale_fill_viridis_c() +  # You can choose other color scales as well
+  labs(title = "Death per Population  by Country") +
+  theme_minimal() +
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r}
+world <- map_data("world")
+
+
+ggplot() +
+  geom_polygon(
+    data = world,
+    aes(x = long, y = lat, group = group),
+    fill = "grey", alpha = 0.3
+  ) +
+  geom_point(
+    data = covid_data_population,
+    aes(x = long, y = lat, size = deaths_population, color = deaths_population),
+    shape = 16, 
+    stroke = F, alpha = 0.7
+  ) + 
+  geom_point(
+    data = covid_data_population,
+    aes(x = long, y = lat, size = confirmed_population, color = deaths_population),
+    shape = 1, 
+    stroke = F, alpha = 0.7
+  ) +
+  geom_point(
+    data = covid_data_population,
+    aes(x = long, y = lat, size = recovered_population, color = deaths_population),
+    shape = 18, 
+    stroke = F, alpha = 0.7
+  ) +
+  scale_size_continuous() +
+  scale_color_viridis_c() +
+  theme_void() +
+  guides(colour = guide_legend()) +
+  labs(
+    title = "Mapping the coronavirus outbreak",
+    subtitle = "",
+    caption = "Source: JHU Unviersity, CSSE."
+  ) +
+  theme(
+    legend.position = "bottom",
+    text = element_text(color = "#22211d"),
+    plot.background = element_rect(fill = "#ffffff", color = NA),
+    panel.background = element_rect(fill = "#ffffff", color = NA),
+    legend.background = element_rect(fill = "#ffffff", color = NA)
+  )
+```
+
+## COVID and population
+
+
+```{r}
+
+male_population <- 
+population_2019_germany <- population_2019 |> 
+  filter(country_region == "Germany") |> 
+  select(-c(1:3), -c(6,7), -c(10:15), -c(48:last_col()))
+
+age_group_80plus_female <- population_2019_germany$`Population ages 80 and above, female (% of female population)`
+
+age_group_80plus_male <- population_2019_germany$`Population ages 80 and above, male (% of male population)`
+print(age_group_80plus_male)
+male_population <- population_2019_germany$`Population, male (% of total population)`
+female_population <- population_2019_germany$`Population, female (% of total population)`
+
+population_2019_germany <- population_2019_germany  |> 
+  pivot_longer(
+    cols = starts_with("Population"),
+    names_to = c("age_group", ".value"),
+    names_pattern = "Population ages (\\d+-\\d+), (\\w+)"
+  ) |> 
+  mutate(
+    age_group = coalesce(age_group, "80+")) |> 
+  slice(-c(1:2),-n())
+population_2019_germany[17, 2] <- age_group_80plus_female
+population_2019_germany[17, 3] <- age_group_80plus_male
+
+population_2019_germany <- population_2019_germany |> 
+  mutate(female = female_population * female/100,
+         male = male_population * male/100)
+# Print the result
+print(population_2019_germany)
+population_2019_germany_long <- population_2019_germany |> 
+  pivot_longer(cols = c(female, male),
+               names_to = "gender",
+               values_to = "percentage")
+print(population_2019_germany_long)
+ggplot(population_2019_germany_long, aes(x = age_group, y = ifelse(gender == "male", -percentage, percentage), fill = gender)) + 
+  geom_bar(stat = "identity") +
+  scale_y_continuous(labels = abs, limits = c(-5,5)) +
+  xlab("age_group") + ylab("% in total population") + 
+  coord_flip()
+
+```
+## Gender vs deaths 
+
+```{r}
+population_2019
+population_2019_gender <- population_2019 |> 
+  select(c(1, 4, 5))
+population_2019_gender
+
+deaths_2020_summary_gender <- deaths_2020_summary |> 
+  left_join(population_2019_gender, by = 'country_region') |> 
+  na.omit()
+  
+names(deaths_2020_summary_gender)
+```
+## Relationship between Deaths, Confirmed, and Recovered by Gender and Country
+```{r}
+library(ggplot2)
+
+selected_countries <- c("USA", "China", "Italy", "Germany", "Spain", "France", "UK", "Iran", "Netherlands", "Belgium")
+deaths_2020_summary_gender_selected <- deaths_2020_summary_gender |> 
+  filter(country_region %in% selected_countries)
+
+# Pivot the data to long format
+deaths_2020_summary_gender_selected_long <- deaths_2020_summary_gender_selected |> 
+  pivot_longer(cols = c("total_deaths_2020", "total_confirmed_2020", "total_recovered_2020"),
+               names_to = "status", values_to = "value")
+deaths_2020_summary_gender_selected_long
+
+# Plot using ggplot2
+ggplot(deaths_2020_summary_gender_selected_long, aes(x = `Population, male (% of total population)`, y = value, fill = status)) +
+  geom_bar(stat = "identity", position = "dodge")  +
+  geom_boxplot(aes(group = `Population, male (% of total population)`), position = position_dodge(width = 0.8), alpha = 0.5) +
+  labs(title = "Relationship between Deaths, Confirmed, and Recovered by Gender and Country",
+       x = "percentage of female population in %", y = "Cases") +
+  scale_fill_manual(values = c("total_deaths_2020" = "red", "total_confirmed_2020" = "blue", "total_recovered_2020" = "green")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+deaths_2020_summary_gender
+# Plot using ggplot2
+ggplot(deaths_2020_summary_gender, aes(x = `Population, female (% of total population)`, y = total_deaths_2020, color = "Female")) +
+  geom_point(position = position_jitter(width = 0.1), alpha = 0.7) +
+  geom_point(aes(x = `Population, male (% of total population)`, y = total_deaths_2020, color = "Male"), position = position_jitter(width = 0.1), alpha = 0.7) +
+  labs(title = "Deaths by Gender Population Percentage",
+       x = "Percentage of Population",
+       y = "Total Deaths 2020") +
+  scale_color_manual(values = c(Female = "red", Male = "blue")) +
+  theme(legend.position = "bottom")
+
+
+```
+
+```{r}
+
+ggplot(deaths_2020_summary_gender, aes(x = `Population, female (% of total population)`, y = total_deaths_2020, color = "Female")) +
+  geom_point(position = position_jitter(width = 0.1), alpha = 0.7) +
+  geom_point(aes(x = `Population, male (% of total population)`, y = total_deaths_2020, color = "Male"), position = position_jitter(width = 0.1), alpha = 0.7) +
+  labs(title = "Deaths by Gender Population Percentage",
+       x = "Percentage of Population",
+       y = "Total Deaths 2020") +
+  scale_color_manual(values = c(Female = "red", Male = "blue")) +
+  theme(legend.position = "top") +
+  scale_y_continuous(breaks = seq(0, 10000, by = 2000),
+                     limits = c(0, 10000),
+                     labels = scales::comma_format())
+
+
+```
+
+
+```{r}
+print(population_2019)
+df <- population_2019 |> 
+  mutate(
+    male_above_65 = `Population, male (% of total population)`/100 * (`Population ages 65-69, male (% of male population)` + `Population ages 70-74, male (% of male population)` + `Population ages 75-79, male (% of male population)` + `Population ages 80 and above, male (% of male population)`),
+    female_above_65 = `Population, female (% of total population)` /100* (`Population ages 65-69, female (% of female population)` + `Population ages 70-74, female (% of female population)` + `Population ages 75-79, female (% of female population)` + `Population ages 80 and above, female (% of female population)`)
+  ) |> 
+  select(country_region, female_above_65,male_above_65)
+df <- df |> 
+  mutate(total_above_65 = male_above_65 + female_above_65) |> 
+  select(country_region, total_above_65)
+print(df)
+deaths_2020_age <- deaths_2020_summary |> 
+  left_join(df, by = "country_region") |> 
+  na.omit()
+deaths_2020_age
+```
+
+```{r}
+ggplot(deaths_2020_age, aes(x = total_above_65, y = total_deaths_2020)) +
+  geom_point() +
+  labs(title = "Deaths vs. Total Population Age Above 65",
+       x = "Total Population Above 65 in %",
+       y = "cases ") +
+  theme_minimal()
+
+```
+
+## GDP VS deaths 
+```{r}
+GDP_2019 <- emissions_population_GDP_nested |> 
+  select(-c(2:4)) |> 
+  unnest(gdp) |>  
+  filter(year == 2019, na.rm = TRUE) |> 
+  select(-2,-last_col()) 
+  
+GDP_deaths <- deaths_2020_summary |> 
+  left_join(GDP_2019, by = "country_region") |> 
+  left_join(population_2019, by = "country_region") |>  
+  mutate(health_expenditure_pop = `Current health expenditure (% of GDP)`/`Population, total`,
+         gdp_population = `GDP (current US$)`/ `Population, total`,.after =5)
+  
+GDP_deaths
+```
+```{r} 
+ggplot(GDP_deaths, aes(x = health_expenditure_pop, y = total_deaths_2020)) +
+  geom_point() +
+  labs(title = "Relationship between Deaths and Health Expenditure",
+       x = "Health Expenditure (% of GDP)",
+       y = "Total Deaths 2020") +
+  theme_minimal()
+
+```
+```{r gdp population, echo=TRUE}
+ggplot(GDP_deaths, aes(x = gdp_population, y = total_deaths_2020)) +
+  geom_point() +
+  labs(title = "Relationship between Deaths cases and gdp by population",
+       x = "GDP per population",
+       y = "Total Deaths 2020") +
+  theme_minimal()
+```
+## Emission VS confirmed cases
+
+```{r emssion and conformed, echo=TRUE}
+emission <- emissions_population_GDP_nested |> 
+  select(c(1, 3)) |> 
+  unnest(emissions) |> 
+  filter(year == 2020) |> 
+  select(-year) 
+
+emission  
+emissions_death <- emission |> 
+  left_join(deaths_2020_summary, by = "country_region")
+emissions_death
+ggplot(emissions_death, aes(y = `Nitrous oxide emissions (thousand metric tons of CO2 equivalent)`, x = total_confirmed_2020)) +
+  geom_point() +
+  labs(title = "Relationship between confirmed cases and Nitrous oxide emissions ",
+       x = "total_confirmed_2020(cases)",
+       y = "Nitrous oxide emissions") +
+  theme_minimal()
+
+```
+
+
+
